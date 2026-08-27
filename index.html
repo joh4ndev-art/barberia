@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Barber Shop - Agendar Cita</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#111827] text-slate-100 font-sans min-h-screen flex flex-col items-center justify-center p-4 md:p-8">
+
+    <div class="max-w-2xl w-full space-y-6">
+        
+        <div class="bg-[#1f2937] p-4 rounded-xl border border-slate-700/50 flex items-center space-x-4 shadow-lg">
+            <div class="bg-amber-500 text-slate-950 font-black p-3 rounded-lg tracking-tighter text-center leading-none">
+                THE<br><span class="text-xs font-bold">BARBER</span>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-amber-500">Barberia J.T</h1>
+                <p class="text-sm text-slate-400">Reserva tu turno en segundos y evita las filas.</p>
+            </div>
+        </div>
+
+        <div class="bg-[#1f2937] p-6 md:p-8 rounded-2xl border border-slate-700/50 shadow-2xl">
+            <h2 class="text-2xl font-extrabold text-amber-500 mb-6 tracking-wide">Agendar tu Cita</h2>
+            
+            <form id="form-barberia" action="backend/guardar_cita.php" method="POST" onsubmit="return validarFormulario(event)" class="space-y-6">
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Tu Nombre Completo</label>
+                    <input type="text" name="nombre_cliente" placeholder="Ej. Carlos Mendoza" required
+                        class="w-full bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Tu Número de WhatsApp 📱</label>
+                    <div class="flex gap-2">
+                        <div class="bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 text-slate-400 flex items-center font-semibold">
+                            +57
+                        </div>
+                        <input type="tel" name="telefono" placeholder="3001234567" required
+                            class="w-full bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition">
+                    </div>
+                </div>
+
+                <div id="contenedor-barberos-dinamicos" class="grid grid-cols-2 gap-4">
+                    <p class="text-xs text-slate-500 italic col-span-2 text-center py-4">
+                        Cargando barberos disponibles...
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Selecciona una Fecha</label>
+                        <input type="date" name="fecha" required
+                            class="w-full bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition scheme-dark">
+                    </div>
+
+                    <div>
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Horarios Disponibles</span>
+                        <div id="contenedor-horas-dinamicas" class="grid grid-cols-3 gap-2">
+                            <p class="text-xs text-slate-500 italic col-span-3 text-center py-2 bg-[#111827]/40 rounded-xl border border-dashed border-slate-800">
+                                Selecciona un barbero y una fecha para ver los turnos disponibles.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <input type="hidden" name="barbero_id" id="input_barbero" required>
+                <input type="hidden" name="hora" id="input_hora" required>
+
+                <button type="submit" 
+                    class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold py-4 px-6 rounded-xl transition duration-300 transform hover:scale-[1.01] shadow-lg shadow-amber-500/10 uppercase tracking-wider text-sm mt-4">
+                    Confirmar Agendamiento
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="text-center space-y-2 mt-8 pb-4">
+        <p class="text-xs text-slate-500">
+            Tu barbero te confirmará por WhatsApp. <br> &copy; 2026 The Barber Shop.
+        </p>
+        <a href="login.html" class="inline-block text-[11px] text-slate-700/50 hover:text-amber-500/80 transition duration-300 select-none">
+            ¿Eres Barbero? Ingresa aquí
+        </a>
+    </div>
+
+    <div id="modal-exito" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50 animate-fade-in">
+        <div class="bg-[#1f2937] border border-slate-700 max-w-md w-full p-6 rounded-2xl text-center space-y-4 shadow-2xl">
+            <div class="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl border border-emerald-500/20 animate-bounce">
+                ✓
+            </div>
+            <h3 class="text-xl font-extrabold text-slate-100">¡Cita Reservada con Éxito!</h3>
+            <p class="text-sm text-slate-400 leading-relaxed">
+                Tu turno ha sido registrado en el sistema. Tu barbero se pondrá en contacto contigo vía WhatsApp para la confirmación final. ¡Te esperamos! 💈✂️
+            </p>
+            <button onclick="cerrarModal()" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition">
+                Entendido
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function validarFormulario(evento) {
+            const barbero = document.getElementById("input_barbero").value;
+            const hora = document.getElementById("input_hora").value;
+
+            if (!barbero) {
+                evento.preventDefault();
+                alert("⚠️ Por favor, selecciona un barbero antes de continuar.");
+                return false;
+            }
+            if (!hora) {
+                evento.preventDefault();
+                alert("⚠️ Por favor, selecciona un horario disponible para tu cita.");
+                return false;
+            }
+            return true;
+        }
+    </script>
+
+    <script src="js/app.js?v=3"></script>
+
+</body>
+</html>
