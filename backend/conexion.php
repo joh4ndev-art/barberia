@@ -1,9 +1,11 @@
 <?php
-// Configuración para el entorno de desarrollo local (XAMPP en Linux Mint)
+// 1. Zona horaria en PHP
+date_default_timezone_set('America/Bogota'); // Ajusta según tu ubicación local
+
 $host = 'localhost';
-$db   = 'barberia_db'; // Nombre de tu base de datos local
-$user = 'root';        // Usuario por defecto en XAMPP
-$pass = '';            // En XAMPP para Linux la contraseña de root viene vacía por defecto
+$db   = 'barberia_db';
+$user = 'root';
+$pass = '';
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
@@ -15,6 +17,10 @@ $options = [
 
 try {
     $pdo = new PDO($dsn, $user, $pass, $options);
+    
+    // 2. Sincronizar zona horaria en MySQL
+    $pdo->exec("SET time_zone = '-05:00';"); // Offset de tu zona horaria local
+    
 } catch (\PDOException $e) {
     die("Error crítico de conexión a la base de datos local: " . $e->getMessage());
 }
