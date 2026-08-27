@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BarberControl - Acceso Administrador</title>
+    <title>BarberControl - Acceso al Sistema</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-[#111827] text-slate-100 font-sans min-h-screen flex items-center justify-center p-4">
@@ -12,16 +12,17 @@
         
         <div class="text-center">
             <div class="inline-block bg-amber-500 text-slate-950 font-black p-2.5 rounded-xl tracking-tighter mb-3">
-                BC
+                Barbería JT
             </div>
-            <h2 id="titulo-auth" class="text-2xl font-extrabold text-amber-500 tracking-wide">Panel Barbero</h2>
-            <p id="subtitulo-auth" class="text-xs text-slate-400 mt-1">Ingresa tus credenciales para gestionar tu agenda.</p>
+            <h2 class="text-2xl font-extrabold text-amber-500 tracking-wide">Acceso al Panel</h2>
+            <p class="text-xs text-slate-400 mt-1">Ingresa tus credenciales para gestionar el sistema.</p>
         </div>
 
-        <form id="form-login" action="backend/auth.php?accion=login" method="POST" class="space-y-4">
+        <!-- Formulario apuntando a backend/login.php -->
+        <form id="form-login" action="backend/login.php" method="POST" class="space-y-4">
             <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1.5">Correo Electrónico</label>
-                <input type="email" name="correo" required placeholder="tu@correo.com"
+                <input type="email" name="email" required placeholder="tu@correo.com"
                     class="w-full bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 transition">
             </div>
             <div>
@@ -33,32 +34,14 @@
             <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition mt-2">
                 Ingresar al Panel
             </button>
-
-            <div class="text-center pt-2">
-                <button type="button" onclick="cambiarVista('recuperar')" class="text-xs text-slate-400 hover:text-amber-500 transition hover:underline">
-                    ¿Olvidaste tu contraseña?
-                </button>
-            </div>
         </form>
 
-        <form id="form-recuperar" action="backend/solicitar_recuperacion.php" method="POST" class="space-y-4 hidden">
-            <p class="text-xs text-slate-400 text-center leading-relaxed">
-                Ingresa tu correo electrónico registrado. Te enviaremos un enlace de recuperación seguro con una validez de 1 hora.
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/40 text-center">
+            <p class="text-xs text-slate-400">
+                ¿Olvidaste tu contraseña? <br>
+                <span class="text-amber-400 font-medium">Contacta al Administrador</span> para que la restablezca.
             </p>
-            <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1.5">Correo del Barbero</label>
-                <input type="email" name="correo" required placeholder="ejemplo@barberia.com"
-                    class="w-full bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 transition">
-            </div>
-            
-            <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition">
-                Enviar Enlace al Correo
-            </button>
-
-            <button type="button" onclick="cambiarVista('login')" class="w-full text-center text-xs text-slate-400 hover:text-slate-200 hover:underline block pt-1">
-                Regresar al Login
-            </button>
-        </form>
+        </div>
 
         <div class="text-center pt-2 border-t border-slate-700/30">
             <a href="index.html" class="text-xs text-slate-500 hover:text-amber-500 transition duration-200">
@@ -69,34 +52,11 @@
     </div>
 
     <script>
-        function cambiarVista(vista) {
-            const login = document.getElementById('form-login');
-            const recuperar = document.getElementById('form-recuperar');
-            const titulo = document.getElementById('titulo-auth');
-            const subtitulo = document.getElementById('subtitulo-auth');
-
-            if (vista === 'recuperar') {
-                login.classList.add('hidden');
-                recuperar.classList.remove('hidden');
-                titulo.innerText = "Recuperar Contraseña";
-                subtitulo.innerText = "Enviaremos un acceso seguro a tu correo electrónico.";
-            } else {
-                recuperar.classList.add('hidden');
-                login.classList.remove('hidden');
-                titulo.innerText = "Panel Barbero";
-                subtitulo.innerText = "Ingresa tus credenciales para gestionar tu agenda.";
-            }
-        }
-
-        // Procesar los estados devueltos por el Servidor PHP
+        // Mensajes dinámicos devueltos por PHP
         const params = new URLSearchParams(window.location.search);
-        if (params.get('error') === 'incorrecto') alert('❌ Correo o contraseña incorrectos.');
-        if (params.get('status') === 'correo_enviado') {
-            alert('📩 Si el correo coincide con un barbero registrado, hemos enviado un enlace de recuperación. ¡Revisa tu bandeja de entrada o Spam!');
-        }
-        if (params.get('status') === 'password_cambiada') {
-            alert('✅ Tu contraseña se ha actualizado correctamente. Ya puedes iniciar sesión con tu nueva clave.');
-        }
+        if (params.get('error') === 'credenciales_incorrectas') alert('❌ Correo o contraseña incorrectos.');
+        if (params.get('error') === 'campos_vacios') alert('⚠️ Por favor completa todos los campos.');
+        if (params.get('status') === 'password_cambiada') alert('✅ Tu contraseña fue actualizada exitosamente.');
     </script>
 </body>
 </html>

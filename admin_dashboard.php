@@ -19,19 +19,21 @@ $fecha_hoy = date('Y-m-d');
 $fecha_manana = date('Y-m-d', strtotime('+1 day'));
 
 try {
-    // 1. CONSULTA DE CITAS PARA HOY (El jefe ve todas con el nombre del barbero, el barbero solo las suyas)
+    // 1. CONSULTA DE CITAS PARA HOY (Relacionando citas con clientes y usuarios)
     if ($mi_rol == 'jefe') {
-        $sqlHoy = "SELECT c.id, c.nombre_cliente, c.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, b.nombre AS nombre_barbero 
+        $sqlHoy = "SELECT c.id, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
                    FROM citas c 
-                   JOIN barberos b ON c.barbero_id = b.id 
+                   JOIN usuarios u ON c.barbero_id = u.id 
+                   JOIN clientes cl ON c.cliente_id = cl.id 
                    WHERE c.fecha = :fecha_hoy AND c.estado = 'pendiente'
                    ORDER BY c.hora ASC";
         $stmtHoy = $pdo->prepare($sqlHoy);
         $stmtHoy->execute([':fecha_hoy' => $fecha_hoy]);
     } else {
-        $sqlHoy = "SELECT c.id, c.nombre_cliente, c.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, b.nombre AS nombre_barbero 
+        $sqlHoy = "SELECT c.id, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
                    FROM citas c 
-                   JOIN barberos b ON c.barbero_id = b.id 
+                   JOIN usuarios u ON c.barbero_id = u.id 
+                   JOIN clientes cl ON c.cliente_id = cl.id 
                    WHERE c.fecha = :fecha_hoy AND c.estado = 'pendiente' AND c.barbero_id = :barbero_id
                    ORDER BY c.hora ASC";
         $stmtHoy = $pdo->prepare($sqlHoy);
@@ -39,19 +41,21 @@ try {
     }
     $citasHoy = $stmtHoy->fetchAll(PDO::FETCH_ASSOC);
 
-    // 2. CONSULTA DE CITAS PARA MAÑANA (El jefe ve todas, el barbero solo las suyas)
+    // 2. CONSULTA DE CITAS PARA MAÑANA
     if ($mi_rol == 'jefe') {
-        $sqlManana = "SELECT c.id, c.nombre_cliente, c.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, b.nombre AS nombre_barbero 
+        $sqlManana = "SELECT c.id, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
                       FROM citas c 
-                      JOIN barberos b ON c.barbero_id = b.id 
+                      JOIN usuarios u ON c.barbero_id = u.id 
+                      JOIN clientes cl ON c.cliente_id = cl.id 
                       WHERE c.fecha = :fecha_manana AND c.estado = 'pendiente'
                       ORDER BY c.hora ASC";
         $stmtManana = $pdo->prepare($sqlManana);
         $stmtManana->execute([':fecha_manana' => $fecha_manana]);
     } else {
-        $sqlManana = "SELECT c.id, c.nombre_cliente, c.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, b.nombre AS nombre_barbero 
+        $sqlManana = "SELECT c.id, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
                       FROM citas c 
-                      JOIN barberos b ON c.barbero_id = b.id 
+                      JOIN usuarios u ON c.barbero_id = u.id 
+                      JOIN clientes cl ON c.cliente_id = cl.id 
                       WHERE c.fecha = :fecha_manana AND c.estado = 'pendiente' AND c.barbero_id = :barbero_id
                       ORDER BY c.hora ASC";
         $stmtManana = $pdo->prepare($sqlManana);
@@ -59,17 +63,17 @@ try {
     }
     $citasManana = $stmtManana->fetchAll(PDO::FETCH_ASSOC);
 
-    // 3. Lista completa de barberos (Agregamos la columna 'telefono' de forma segura)
+    // 3. Lista completa de barberos desde la tabla usuarios
     $barberosLista = [];
     if ($mi_rol == 'jefe') {
-        $stmtB = $pdo->prepare("SELECT id, nombre, correo, telefono, rol FROM barberos WHERE id != :mi_id");
+        $stmtB = $pdo->prepare("SELECT id, nombre, email, estado, rol FROM usuarios WHERE id != :mi_id AND rol = 'barbero'");
         $stmtB->execute([':mi_id' => $mi_id]);
         $barberosLista = $stmtB->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // 4. NUEVA CONSULTA: HORARIOS PUBLICADOS POR EL BARBERO LOGUEADO (Hoy y Mañana)
+    // 4. HORARIOS PUBLICADOS POR EL BARBERO LOGUEADO (Desde la tabla disponibilidad_barberos)
     $sqlMisHorarios = "SELECT id, fecha, TIME_FORMAT(hora, '%H:%i') as hora_corta, estado 
-                       FROM horarios 
+                       FROM disponibilidad_barberos 
                        WHERE barbero_id = :barbero_id AND (fecha = :fecha_hoy OR fecha = :fecha_manana)
                        ORDER BY fecha ASC, hora ASC";
     $stmtMisHorarios = $pdo->prepare($sqlMisHorarios);
