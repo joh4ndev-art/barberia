@@ -1,8 +1,9 @@
 <?php
-$host = 'localhost'; // En Hostinger se deja 'localhost' siempre
-$db   = 'u185582191_BarberiaJT'; // <-- PON EL NOMBRE COMPLETO DE TU BD DE HOSTINGER
-$user = 'u185582191_BarberTyler';    // <-- PON EL USUARIO COMPLETO DE TU BD DE HOSTINGER
-$pass = 'BarberT_yl3r99';  // <-- PON LA CONTRASEÑA DE TU BD DE HOSTINGER
+// Configuración para el entorno de desarrollo local (XAMPP en Linux Mint)
+$host = 'localhost';
+$db   = 'barberia_db'; // Nombre de tu base de datos local
+$user = 'root';        // Usuario por defecto en XAMPP
+$pass = '';            // En XAMPP para Linux la contraseña de root viene vacía por defecto
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
@@ -15,6 +16,6 @@ $options = [
 try {
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (\PDOException $e) {
-    die("Error crítico de conexión a la base de datos: " . $e->getMessage());
+    die("Error crítico de conexión a la base de datos local: " . $e->getMessage());
 }
 ?>
