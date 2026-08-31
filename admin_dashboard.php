@@ -13,14 +13,18 @@ $mi_id = $_SESSION['barbero_id'];
 $mi_nombre = $_SESSION['barbero_nombre'];
 $mi_rol = $_SESSION['barbero_rol'];
 
-// Definimos las fechas de hoy y mañana desde el servidor PHP
+// Configuración de zona horaria
 date_default_timezone_set('America/Bogota'); 
 $fecha_hoy = date('Y-m-d');
+$fecha_fin_mes = date('Y-m-t'); // 't' obtiene el último día del mes en curso
 $fecha_manana = date('Y-m-d', strtotime('+1 day'));
 
+// Normalización de rol de administrador (soporta 'jefe' o 'admin')
+$es_admin = ($mi_rol === 'jefe' || $mi_rol === 'admin');
+
 try {
-    // 1. CONSULTA DE CITAS PARA HOY (Relacionando citas con clientes y usuarios)
-    if ($mi_rol == 'jefe') {
+    // 1. CONSULTA DE CITAS PARA HOY
+    if ($es_admin) {
         $sqlHoy = "SELECT c.id, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
                    FROM citas c 
                    JOIN usuarios u ON c.barbero_id = u.id 
@@ -41,46 +45,48 @@ try {
     }
     $citasHoy = $stmtHoy->fetchAll(PDO::FETCH_ASSOC);
 
-    // 2. CONSULTA DE CITAS PARA MAÑANA
-    if ($mi_rol == 'jefe') {
-        $sqlManana = "SELECT c.id, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
-                      FROM citas c 
-                      JOIN usuarios u ON c.barbero_id = u.id 
-                      JOIN clientes cl ON c.cliente_id = cl.id 
-                      WHERE c.fecha = :fecha_manana AND c.estado = 'pendiente'
-                      ORDER BY c.hora ASC";
-        $stmtManana = $pdo->prepare($sqlManana);
-        $stmtManana->execute([':fecha_manana' => $fecha_manana]);
+    // 2. CONSULTA DE CITAS DESDE MAÑANA HASTA FIN DE MES
+    if ($es_admin) {
+        $sqlMes = "SELECT c.id, c.fecha, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
+                   FROM citas c 
+                   JOIN usuarios u ON c.barbero_id = u.id 
+                   JOIN clientes cl ON c.cliente_id = cl.id 
+                   WHERE c.fecha >= :fecha_manana AND c.estado = 'pendiente'
+                   ORDER BY c.fecha ASC, c.hora ASC";
+        $stmtMes = $pdo->prepare($sqlMes);
+        $stmtMes->execute([':fecha_manana' => $fecha_manana]);
     } else {
-        $sqlManana = "SELECT c.id, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
-                      FROM citas c 
-                      JOIN usuarios u ON c.barbero_id = u.id 
-                      JOIN clientes cl ON c.cliente_id = cl.id 
-                      WHERE c.fecha = :fecha_manana AND c.estado = 'pendiente' AND c.barbero_id = :barbero_id
-                      ORDER BY c.hora ASC";
-        $stmtManana = $pdo->prepare($sqlManana);
-        $stmtManana->execute([':fecha_manana' => $fecha_manana, ':barbero_id' => $mi_id]);
+        $sqlMes = "SELECT c.id, c.fecha, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
+                   FROM citas c 
+                   JOIN usuarios u ON c.barbero_id = u.id 
+                   JOIN clientes cl ON c.cliente_id = cl.id 
+                   WHERE c.fecha >= :fecha_manana AND c.estado = 'pendiente' AND c.barbero_id = :barbero_id
+                   ORDER BY c.fecha ASC, c.hora ASC";
+        $stmtMes = $pdo->prepare($sqlMes);
+        $stmtMes->execute([
+            ':fecha_manana' => $fecha_manana,
+            ':barbero_id'   => $mi_id
+        ]);
     }
-    $citasManana = $stmtManana->fetchAll(PDO::FETCH_ASSOC);
+    $citasMes = $stmtMes->fetchAll(PDO::FETCH_ASSOC);
 
-    // 3. Lista completa de barberos desde la tabla usuarios
+    // 3. LISTA DE BARBEROS REGISTRADOS (Incluyendo columna telefono)
     $barberosLista = [];
-    if ($mi_rol == 'jefe') {
-        $stmtB = $pdo->prepare("SELECT id, nombre, email, estado, rol FROM usuarios WHERE id != :mi_id AND rol = 'barbero'");
+    if ($es_admin) {
+        $stmtB = $pdo->prepare("SELECT id, nombre, email, telefono, estado, rol FROM usuarios WHERE id != :mi_id AND rol = 'barbero'");
         $stmtB->execute([':mi_id' => $mi_id]);
         $barberosLista = $stmtB->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // 4. HORARIOS PUBLICADOS POR EL BARBERO LOGUEADO (Desde la tabla disponibilidad_barberos)
+    // 4. HORARIOS PUBLICADOS POR EL USUARIO LOGUEADO
     $sqlMisHorarios = "SELECT id, fecha, TIME_FORMAT(hora, '%H:%i') as hora_corta, estado 
                        FROM disponibilidad_barberos 
-                       WHERE barbero_id = :barbero_id AND (fecha = :fecha_hoy OR fecha = :fecha_manana)
+                       WHERE barbero_id = :barbero_id AND fecha >= :fecha_hoy
                        ORDER BY fecha ASC, hora ASC";
     $stmtMisHorarios = $pdo->prepare($sqlMisHorarios);
     $stmtMisHorarios->execute([
         ':barbero_id' => $mi_id,
-        ':fecha_hoy' => $fecha_hoy,
-        ':fecha_manana' => $fecha_manana
+        ':fecha_hoy'  => $fecha_hoy
     ]);
     $misHorarios = $stmtMisHorarios->fetchAll(PDO::FETCH_ASSOC);
 
@@ -127,7 +133,7 @@ try {
         <div class="border-b border-slate-700/50 pb-5">
             <h1 class="text-2xl font-extrabold text-slate-100">¡Hola, <?php echo htmlspecialchars($mi_nombre); ?>!</h1>
             <p class="text-sm text-slate-400">
-                <?php echo ($mi_rol == 'jefe') ? 'Panel de Control global de la barbería.' : 'Aquí tienes las herramientas de control de tu agenda personal.'; ?>
+                <?php echo ($es_admin) ? 'Panel de Administración Global y Personal de Agenda.' : 'Herramientas de control de tu agenda personal.'; ?>
             </p>
         </div>
 
@@ -143,7 +149,7 @@ try {
                 
                 <div class="space-y-3">
                     <h3 class="text-xs font-bold text-amber-500/80 uppercase tracking-widest border-b border-slate-700/60 pb-2 flex justify-between">
-                        <span>☀️ Para Hoy (<?php echo date('d/m'); ?>)</span>
+                        <span>☀️ Citas para Hoy (<?php echo date('d/m'); ?>)</span>
                         <span class="bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full text-[10px]"><?php echo count($citasHoy); ?> turnos</span>
                     </h3>
 
@@ -181,18 +187,21 @@ try {
 
                 <div class="space-y-3">
                     <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-700/60 pb-2 flex justify-between">
-                        <span>🌙 Para Mañana</span>
-                        <span class="bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full text-[10px]"><?php echo count($citasManana); ?> turnos</span>
+                        <span>🌙 Próximas Citas</span>
+                        <span class="bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full text-[10px]"><?php echo count($citasMes); ?> turnos</span>
                     </h3>
 
                     <div class="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
-                        <?php if (empty($citasManana)): ?>
-                            <p class="text-xs text-slate-500 italic py-4 text-center bg-[#111827]/40 rounded-xl border border-dashed border-slate-800">No hay citas agendadas para mañana aún.</p>
+                        <?php if (empty($citasMes)): ?>
+                            <p class="text-xs text-slate-500 italic py-4 text-center bg-[#111827]/40 rounded-xl border border-dashed border-slate-800">No hay más citas agendadas.</p>
                         <?php else: ?>
-                            <?php foreach ($citasManana as $cita): ?>
+                            <?php foreach ($citasMes as $cita): ?>
                                 <div class="bg-[#111827] border border-slate-800 p-3 rounded-xl flex items-center justify-between hover:border-slate-700 transition">
                                     <div class="space-y-0.5">
                                         <div class="flex items-center space-x-2">
+                                            <span class="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                                <?php echo date('d/m', strtotime($cita['fecha'])); ?>
+                                            </span>
                                             <span class="text-xs font-black text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700"><?php echo $cita['hora_corta']; ?></span>
                                             <span class="text-sm font-bold text-slate-200"><?php echo htmlspecialchars($cita['nombre_cliente']); ?></span>
                                         </div>
@@ -226,20 +235,31 @@ try {
                 <h3 class="text-base font-bold text-amber-500 flex items-center space-x-2">
                     <span>⚡</span> <span>Abrir Nuevas Horas</span>
                 </h3>
-                <p class="text-xs text-slate-400">Habilita los bloques de tiempo en los que vas a ofrecer servicios.</p>
+                <p class="text-xs text-slate-400">Habilita bloques de atención para fechas presentes o futuras.</p>
                 
-                <form action="backend/guardar_horarios.php" method="POST" class="space-y-3 pt-1">
+                <form action="backend/guardar_disponibilidad.php" method="POST" class="space-y-3 pt-1">
                     <div>
                         <label class="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Día de Atención</label>
-                        <select name="fecha" required class="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500">
-                            <option value="<?php echo $fecha_hoy; ?>">Hoy (<?php echo date('d/m', strtotime($fecha_hoy)); ?>)</option>
-                            <option value="<?php echo $fecha_manana; ?>">Mañana (<?php echo date('d/m', strtotime($fecha_manana)); ?>)</option>
-                        </select>
+                        <input 
+                            type="date" 
+                            id="input-fecha"
+                            name="fecha" 
+                            min="<?php echo $fecha_hoy; ?>" 
+                            value="<?php echo $fecha_hoy; ?>" 
+                            required 
+                            class="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500"
+                        >
                     </div>
 
                     <div>
                         <label class="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Hora de Inicio</label>
-                        <input type="time" name="hora" required class="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500">
+                        <input 
+                            type="time" 
+                            id="input-hora"
+                            name="hora" 
+                            required 
+                            class="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500"
+                        >
                     </div>
 
                     <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-2.5 rounded-xl text-xs uppercase tracking-wide transition">
@@ -251,8 +271,8 @@ try {
             <div class="bg-[#1f2937] p-5 rounded-2xl border border-slate-700/50 shadow-xl space-y-4 lg:col-span-2">
                 <div class="flex justify-between items-center">
                     <div>
-                        <h3 class="text-base font-bold text-amber-500">⏰ Mi Estado de Turnos</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Visualiza tu parrilla horaria. Elimina las horas libres si surge un imprevisto.</p>
+                        <h3 class="text-base font-bold text-amber-500">⏰ Mi Disponibilidad Habilitada</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">Bloques publicados activos para recibir citas.</p>
                     </div>
                     <span class="bg-slate-800 border border-slate-700 text-slate-300 px-2.5 py-1 rounded-full text-xs font-semibold">
                         <?php echo count($misHorarios); ?> bloques
@@ -262,15 +282,15 @@ try {
                 <div class="max-h-[260px] overflow-y-auto pr-1">
                     <?php if (empty($misHorarios)): ?>
                         <p class="text-xs text-slate-500 italic py-8 text-center bg-[#111827]/40 rounded-xl border border-dashed border-slate-800">
-                            No has habilitado ningún bloque de disponibilidad para hoy o mañana todavía.
+                            No has habilitado ningún bloque de disponibilidad aún.
                         </p>
                     <?php else: ?>
                         <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                             <?php foreach ($misHorarios as $h): ?>
                                 <div class="bg-[#111827] border <?php echo ($h['estado'] == 'ocupado') ? 'border-amber-500/30' : 'border-slate-800'; ?> p-2.5 rounded-xl flex items-center justify-between transition">
                                     <div class="space-y-0.5">
-                                        <div class="text-[11px] font-bold <?php echo ($h['fecha'] == $fecha_hoy) ? 'text-amber-400' : 'text-slate-400'; ?>">
-                                            <?php echo ($h['fecha'] == $fecha_hoy) ? 'Hoy' : 'Mañana'; ?>
+                                        <div class="text-[11px] font-bold text-amber-400">
+                                            📅 <?php echo date('d/m', strtotime($h['fecha'])); ?>
                                         </div>
                                         <div class="text-sm font-black text-slate-200"><?php echo $h['hora_corta']; ?></div>
                                     </div>
@@ -283,7 +303,7 @@ try {
                                         <?php else: ?>
                                             <a href="backend/eliminar_horario.php?id=<?php echo $h['id']; ?>" 
                                                onclick="return confirm('¿Quieres retirar este horario disponible del sistema público?')" 
-                                               class="bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white p-1.5 rounded-lg text-xs transition inline-block animate-pulse hover:animate-none" 
+                                               class="bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white p-1.5 rounded-lg text-xs transition inline-block" 
                                                title="Retirar Horario">
                                                 🗑️
                                             </a>
@@ -298,7 +318,7 @@ try {
 
         </div>
 
-        <?php if ($mi_rol == 'jefe'): ?>
+        <?php if ($es_admin): ?>
             <div class="border-t border-slate-700/50 pt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
                 <div class="bg-[#1f2937] p-5 rounded-2xl border border-slate-700/50 shadow-xl space-y-4 lg:col-span-1">
@@ -329,7 +349,8 @@ try {
                                 <tr class="border-b border-slate-700 text-slate-400 uppercase tracking-wider">
                                     <th class="pb-2 font-semibold">Nombre</th>
                                     <th class="pb-2 font-semibold">Correo</th>
-                                    <th class="pb-2 font-semibold">WhatsApp</th> <th class="pb-2 font-semibold">Rol</th>
+                                    <th class="pb-2 font-semibold">WhatsApp</th> 
+                                    <th class="pb-2 font-semibold">Rol</th>
                                     <th class="pb-2 font-semibold text-right">Acción</th>
                                 </tr>
                             </thead>
@@ -337,7 +358,7 @@ try {
                                 <?php foreach ($barberosLista as $b): ?>
                                     <tr>
                                         <td class="py-3 font-medium text-slate-200"><?php echo htmlspecialchars($b['nombre']); ?></td>
-                                        <td class="py-3 text-slate-400"><?php echo htmlspecialchars($b['correo']); ?></td>
+                                        <td class="py-3 text-slate-400"><?php echo htmlspecialchars($b['email']); ?></td>
                                         <td class="py-3 text-emerald-400 font-mono"><?php echo htmlspecialchars($b['telefono'] ?? 'Sin número'); ?></td>
                                         <td class="py-3"><span class="bg-slate-700 text-slate-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold"><?php echo htmlspecialchars($b['rol']); ?></span></td>
                                         <td class="py-3 text-right">
@@ -356,7 +377,7 @@ try {
     </main>
 
     <script>
-        // Alertas dinámicas de gestión de personal y turnos
+        // --- 1. LECTURA DE MENSAJES Y ALERTAS ---
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('msg') === 'creado') alert('✅ ¡Nuevo barbero incorporado al sistema con éxito!');
         if (urlParams.get('msg') === 'eliminado') alert('🗑️ El barbero ha sido eliminado del sistema.');
@@ -364,17 +385,54 @@ try {
         if (urlParams.get('msg') === 'horarios_guardados') alert('📆 ¡Tus horarios se han publicado correctamente!');
         if (urlParams.get('msg') === 'horario_eliminado') alert('🗑️ El bloque horario disponible ha sido removido con éxito.');
         if (urlParams.get('msg') === 'horario_duplicado') alert('⚠️ Ese bloque de horario ya lo tienes habilitado para ese día.');
+        if (urlParams.get('msg') === 'hora_pasada') alert('⚠️ La hora seleccionada ya transcurrió hoy. Por favor elige una hora futura.');
+        if (urlParams.get('msg') === 'fecha_invalida') alert('⚠️ No puedes seleccionar fechas pasadas.');
 
-        // Función interactiva para Mostrar/Ocultar la Contraseña Provisoria
+        // --- 2. MOSTRAR / OCULTAR CONTRASEÑA ---
         function togglePassword() {
             const inputPass = document.getElementById("input-password-provisoria");
             if (inputPass) {
-                if (inputPass.type === "password") {
-                    inputPass.type = "text";
-                } else {
-                    inputPass.type = "password";
-                }
+                inputPass.type = inputPass.type === "password" ? "text" : "password";
             }
+        }
+
+        // --- 3. BLOQUEO DINÁMICO DE HORA PASADA EN EL INPUT TIME ---
+        const inputFecha = document.getElementById('input-fecha');
+        const inputHora = document.getElementById('input-hora');
+
+        function actualizarMinHora() {
+            if (!inputFecha || !inputHora) return;
+
+            // Obtener fecha actual en formato local YYYY-MM-DD
+            const ahora = new Date();
+            const ano = ahora.getFullYear();
+            const mes = String(ahora.getMonth() + 1).padStart(2, '0');
+            const dia = String(ahora.getDate()).padStart(2, '0');
+            const fechaHoyStr = `${ano}-${mes}-${dia}`;
+
+            if (inputFecha.value === fechaHoyStr) {
+                // Obtener hora actual en formato HH:MM
+                const horas = String(ahora.getHours()).padStart(2, '0');
+                const minutos = String(ahora.getMinutes()).padStart(2, '0');
+                const horaActual = `${horas}:${minutos}`;
+
+                // Asignar restricción mínima
+                inputHora.min = horaActual;
+
+                // Si la hora cargada/seleccionada es anterior a la actual, se borra
+                if (inputHora.value && inputHora.value < horaActual) {
+                    inputHora.value = '';
+                }
+            } else {
+                // Si selecciona un día futuro, se remueve el límite mínimo de hora
+                inputHora.removeAttribute('min');
+            }
+        }
+
+        if (inputFecha && inputHora) {
+            inputFecha.addEventListener('change', actualizarMinHora);
+            inputHora.addEventListener('change', actualizarMinHora);
+            document.addEventListener('DOMContentLoaded', actualizarMinHora);
         }
     </script>
 </body>

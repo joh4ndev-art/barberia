@@ -6,19 +6,24 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once 'conexion.php';
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $barbero_id = (int)($_POST['barbero_id'] ?? 0);
+    // Soportar ambas variantes de nombres en POST
+    $barbero_id = (int)($_POST['barbero_id'] ?? $_POST['barbero'] ?? 0);
     $fecha      = trim($_POST['fecha'] ?? '');
     $hora       = trim($_POST['hora'] ?? '');
-    $nombre     = trim($_POST['nombre_cliente'] ?? '');
-    $telefono   = trim($_POST['telefono_cliente'] ?? '');
-    $email      = trim($_POST['email_cliente'] ?? '');
+    $nombre     = trim($_POST['nombre_cliente'] ?? $_POST['nombre'] ?? '');
+    $telefono   = trim($_POST['telefono_cliente'] ?? $_POST['telefono'] ?? '');
+    $email      = trim($_POST['email_cliente'] ?? $_POST['email'] ?? '');
 
     if (empty($barbero_id) || empty($fecha) || empty($hora) || empty($nombre) || empty($telefono)) {
         die("Por favor completa todos los campos obligatorios.");
     }
 
+    // Normalizar formato de hora HH:MM a HH:MM:SS para coincidir exactamente con la BD
+    if (strlen($hora) === 5) {
+        $hora .= ':00';
+    }
+
     try {
-        // Iniciamos transacción para asegurar consistencia
         $pdo->beginTransaction();
 
         // 1. Verificar si el slot sigue disponible
@@ -47,7 +52,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         // 3. Crear la cita
         $stmtCita = $pdo->prepare("INSERT INTO citas (cliente_id, barbero_id, fecha, hora, estado) 
-                                   VALUES (:cliente_id, :barbero_id, :fecha, :hora, 'confirmada')");
+                                   VALUES (:cliente_id, :barbero_id, :fecha, :hora, 'pendiente')");
         $stmtCita->execute([
             ':cliente_id' => $cliente_id,
             ':barbero_id' => $barbero_id,
@@ -55,7 +60,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             ':hora'       => $hora
         ]);
 
-        // 4. Marcar la hora como ocupada en la agenda del barbero
+        // 4. Marcar la hora como ocupada
         $stmtUpdate = $pdo->prepare("UPDATE disponibilidad_barberos SET estado = 'ocupado' 
                                      WHERE barbero_id = :barbero_id AND fecha = :fecha AND hora = :hora");
         $stmtUpdate->execute([
@@ -64,10 +69,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             ':hora'       => $hora
         ]);
 
-        // Confirmar los cambios
         $pdo->commit();
 
-        header("Location: ../reserva_exitosa.php?msg=confirmada");
+        // Redirección corregida al HTML principal con el modal
+        header("Location: ../index.html?reserva=exitosa");
         exit();
 
     } catch (PDOException $e) {
@@ -77,7 +82,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         die("Error al procesar la reserva: " . $e->getMessage());
     }
 } else {
-    header("Location: ../index.php");
+    header("Location: ../index.html");
     exit();
 }
 ?>

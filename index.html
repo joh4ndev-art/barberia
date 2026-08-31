@@ -37,7 +37,8 @@
                         <div class="bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 text-slate-400 flex items-center font-semibold">
                             +57
                         </div>
-                        <input type="tel" name="telefono" placeholder="3001234567" required
+                        <!-- Cambiado name a "telefono_input" para procesarlo con el indicativo -->
+                        <input type="tel" id="telefono_num" placeholder="3001234567" required
                             class="w-full bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition">
                     </div>
                 </div>
@@ -65,8 +66,10 @@
                     </div>
                 </div>
 
+                <!-- Inputs Ocultos Requeridos por Backend -->
                 <input type="hidden" name="barbero_id" id="input_barbero" required>
                 <input type="hidden" name="hora" id="input_hora" required>
+                <input type="hidden" name="telefono_cliente" id="input_telefono_final" required>
 
                 <button type="submit" 
                     class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold py-4 px-6 rounded-xl transition duration-300 transform hover:scale-[1.01] shadow-lg shadow-amber-500/10 uppercase tracking-wider text-sm mt-4">
@@ -101,7 +104,13 @@
         function validarFormulario(evento) {
             const barbero = document.getElementById("input_barbero").value;
             const hora = document.getElementById("input_hora").value;
+            const numTel = document.getElementById("telefono_num").value.trim();
 
+            if (!numTel) {
+                evento.preventDefault();
+                alert("⚠️ Por favor, ingresa tu número de WhatsApp.");
+                return false;
+            }
             if (!barbero) {
                 evento.preventDefault();
                 alert("⚠️ Por favor, selecciona un barbero antes de continuar.");
@@ -112,11 +121,38 @@
                 alert("⚠️ Por favor, selecciona un horario disponible para tu cita.");
                 return false;
             }
+
+            // Concatenar el indicativo +57 al número ingresado
+            const telFinal = numTel.startsWith('57') ? numTel : '57' + numTel;
+            document.getElementById("input_telefono_final").value = telFinal;
+
             return true;
         }
     </script>
 
     <script src="js/app.js?v=3"></script>
+
+    <script>
+        // Mostrar modal si la URL trae ?reserva=exitosa
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('reserva') === 'exitosa') {
+                const modal = document.getElementById('modal-exito');
+                if (modal) {
+                    modal.classList.remove('hidden');
+                }
+            }
+        });
+
+        function cerrarModal() {
+            const modal = document.getElementById('modal-exito');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+            // Limpiar la URL para que no vuelva a salir el modal si el usuario refresca
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    </script>
 
 </body>
 </html>
