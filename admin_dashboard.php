@@ -16,69 +16,59 @@ $mi_rol = $_SESSION['barbero_rol'];
 // Configuración de zona horaria
 date_default_timezone_set('America/Bogota'); 
 $fecha_hoy = date('Y-m-d');
-$fecha_fin_mes = date('Y-m-t'); // 't' obtiene el último día del mes en curso
 $fecha_manana = date('Y-m-d', strtotime('+1 day'));
 
-// Normalización de rol de administrador (soporta 'jefe' o 'admin')
-$es_admin = ($mi_rol === 'jefe' || $mi_rol === 'admin');
+// Exclusividad de rol Admin
+$es_admin = ($mi_rol === 'admin');
 
 try {
-    // 1. CONSULTA DE CITAS PARA HOY
-    if ($es_admin) {
-        $sqlHoy = "SELECT c.id, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
-                   FROM citas c 
-                   JOIN usuarios u ON c.barbero_id = u.id 
-                   JOIN clientes cl ON c.cliente_id = cl.id 
-                   WHERE c.fecha = :fecha_hoy AND c.estado = 'pendiente'
-                   ORDER BY c.hora ASC";
-        $stmtHoy = $pdo->prepare($sqlHoy);
-        $stmtHoy->execute([':fecha_hoy' => $fecha_hoy]);
-    } else {
-        $sqlHoy = "SELECT c.id, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
-                   FROM citas c 
-                   JOIN usuarios u ON c.barbero_id = u.id 
-                   JOIN clientes cl ON c.cliente_id = cl.id 
-                   WHERE c.fecha = :fecha_hoy AND c.estado = 'pendiente' AND c.barbero_id = :barbero_id
-                   ORDER BY c.hora ASC";
-        $stmtHoy = $pdo->prepare($sqlHoy);
-        $stmtHoy->execute([':fecha_hoy' => $fecha_hoy, ':barbero_id' => $mi_id]);
-    }
-    $citasHoy = $stmtHoy->fetchAll(PDO::FETCH_ASSOC);
-
-    // 2. CONSULTA DE CITAS DESDE MAÑANA HASTA FIN DE MES
-    if ($es_admin) {
-        $sqlMes = "SELECT c.id, c.fecha, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
-                   FROM citas c 
-                   JOIN usuarios u ON c.barbero_id = u.id 
-                   JOIN clientes cl ON c.cliente_id = cl.id 
-                   WHERE c.fecha >= :fecha_manana AND c.estado = 'pendiente'
-                   ORDER BY c.fecha ASC, c.hora ASC";
-        $stmtMes = $pdo->prepare($sqlMes);
-        $stmtMes->execute([':fecha_manana' => $fecha_manana]);
-    } else {
-        $sqlMes = "SELECT c.id, c.fecha, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
-                   FROM citas c 
-                   JOIN usuarios u ON c.barbero_id = u.id 
-                   JOIN clientes cl ON c.cliente_id = cl.id 
-                   WHERE c.fecha >= :fecha_manana AND c.estado = 'pendiente' AND c.barbero_id = :barbero_id
-                   ORDER BY c.fecha ASC, c.hora ASC";
-        $stmtMes = $pdo->prepare($sqlMes);
-        $stmtMes->execute([
-            ':fecha_manana' => $fecha_manana,
-            ':barbero_id'   => $mi_id
-        ]);
-    }
-    $citasMes = $stmtMes->fetchAll(PDO::FETCH_ASSOC);
-
-    // 3. LISTA DE BARBEROS REGISTRADOS (Incluyendo columna telefono)
+    // 1. LISTA DE BARBEROS (Para el selector del administrador)
     $barberosLista = [];
     if ($es_admin) {
-        $stmtB = $pdo->prepare("SELECT id, nombre, email, telefono, estado, rol FROM usuarios WHERE id != :mi_id AND rol = 'barbero'");
-        $stmtB->execute([':mi_id' => $mi_id]);
+        $stmtB = $pdo->prepare("SELECT id, nombre FROM usuarios WHERE rol = 'barbero'");
+        $stmtB->execute();
         $barberosLista = $stmtB->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // 4. HORARIOS PUBLICADOS POR EL USUARIO LOGUEADO
+    // 2. FILTRAR CITAS (Hoy y Mañana)
+    $barbero_seleccionado = isset($_GET['barbero_ver']) && $_GET['barbero_ver'] !== '' ? intval($_GET['barbero_ver']) : null;
+
+    if ($es_admin && $barbero_seleccionado) {
+        // Citas del barbero específico seleccionado por el admin (Hoy y Mañana)
+        $sqlCitas = "SELECT c.id, c.fecha, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
+                   FROM citas c 
+                   JOIN usuarios u ON c.barbero_id = u.id 
+                   JOIN clientes cl ON c.cliente_id = cl.id 
+                   WHERE c.barbero_id = :barbero_id 
+                     AND c.fecha BETWEEN :fecha_hoy AND :fecha_manana 
+                     AND c.estado = 'pendiente'
+                   ORDER BY c.fecha ASC, c.hora ASC";
+        $stmtC = $pdo->prepare($sqlCitas);
+        $stmtC->execute([
+            ':barbero_id'   => $barbero_seleccionado,
+            ':fecha_hoy'    => $fecha_hoy,
+            ':fecha_manana' => $fecha_manana
+        ]);
+    } else {
+        // Muestra ÚNICAMENTE las citas propias (Si entra el admin sin filtrar, muestra solo las del Admin)
+        $sqlCitas = "SELECT c.id, c.fecha, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
+                   FROM citas c 
+                   JOIN usuarios u ON c.barbero_id = u.id 
+                   JOIN clientes cl ON c.cliente_id = cl.id 
+                   WHERE c.barbero_id = :barbero_id 
+                     AND c.fecha BETWEEN :fecha_hoy AND :fecha_manana 
+                     AND c.estado = 'pendiente'
+                   ORDER BY c.fecha ASC, c.hora ASC";
+        $stmtC = $pdo->prepare($sqlCitas);
+        $stmtC->execute([
+            ':barbero_id'   => $mi_id,
+            ':fecha_hoy'    => $fecha_hoy,
+            ':fecha_manana' => $fecha_manana
+        ]);
+    }
+    $citasAgenda = $stmtC->fetchAll(PDO::FETCH_ASSOC);
+
+    // 3. HORARIOS PUBLICADOS POR EL USUARIO LOGUEADO
     $sqlMisHorarios = "SELECT id, fecha, TIME_FORMAT(hora, '%H:%i') as hora_corta, estado 
                        FROM disponibilidad_barberos 
                        WHERE barbero_id = :barbero_id AND fecha >= :fecha_hoy
@@ -90,6 +80,14 @@ try {
     ]);
     $misHorarios = $stmtMisHorarios->fetchAll(PDO::FETCH_ASSOC);
 
+    // 4. LISTA DE BARBEROS PARA GESTIÓN (ADMIN)
+    $barberosGestion = [];
+    if ($es_admin) {
+        $stmtBG = $pdo->prepare("SELECT id, nombre, email, estado, rol FROM usuarios WHERE id != :mi_id AND rol = 'barbero'");
+        $stmtBG->execute([':mi_id' => $mi_id]);
+        $barberosGestion = $stmtBG->fetchAll(PDO::FETCH_ASSOC);
+    }
+
 } catch (PDOException $e) {
     die("Error al cargar el panel: " . $e->getMessage());
 }
@@ -100,7 +98,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BarberControl - Panel</title>
+    <title>BarberControl - Panel de Administración</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-[#111827] text-slate-100 font-sans min-h-screen flex flex-col md:flex-row">
@@ -113,7 +111,7 @@ try {
             </div>
 
             <nav class="space-y-2">
-                <a href="#" class="flex items-center space-x-3 bg-amber-500 text-slate-950 font-bold px-4 py-3 rounded-xl transition shadow-lg shadow-amber-500/10">
+                <a href="admin_dashboard.php" class="flex items-center space-x-3 bg-amber-500 text-slate-950 font-bold px-4 py-3 rounded-xl transition shadow-lg shadow-amber-500/10">
                     <span>📅</span> <span>Mi Agenda</span>
                 </a>
                 <a href="backend/logout.php" class="flex items-center space-x-3 text-rose-400 hover:bg-rose-500/10 px-4 py-3 rounded-xl transition font-semibold">
@@ -132,103 +130,114 @@ try {
         
         <div class="border-b border-slate-700/50 pb-5">
             <h1 class="text-2xl font-extrabold text-slate-100">¡Hola, <?php echo htmlspecialchars($mi_nombre); ?>!</h1>
-            <p class="text-sm text-slate-400">
-                <?php echo ($es_admin) ? 'Panel de Administración Global y Personal de Agenda.' : 'Herramientas de control de tu agenda personal.'; ?>
-            </p>
+            <p class="text-sm text-slate-400">Panel de Administración Global y Personal de Agenda.</p>
         </div>
 
-        <section class="bg-[#1f2937] p-6 rounded-2xl border border-slate-700/50 shadow-xl space-y-6">
+        <!-- VER CITAS DE LOS BARBEROS (Solo Admin) -->
+        <?php if ($es_admin): ?>
+        <section class="bg-[#1f2937] p-5 rounded-2xl border border-slate-700/50 shadow-xl space-y-3">
             <div>
-                <h2 class="text-lg font-bold text-amber-500 flex items-center space-x-2">
-                    <span>📅</span> <span>Turnos Confirmados</span>
+                <h2 class="text-sm font-bold text-amber-500 flex items-center space-x-2">
+                    <span>👥</span> <span>Ver las citas de los barberos</span>
                 </h2>
-                <p class="text-xs text-slate-400 mt-0.5">Listado de clientes con cupos reservados en el sistema.</p>
+                <p class="text-xs text-slate-400 mt-0.5">Selecciona un barbero para consultar sus turnos confirmados entre hoy y mañana.</p>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                
-                <div class="space-y-3">
-                    <h3 class="text-xs font-bold text-amber-500/80 uppercase tracking-widest border-b border-slate-700/60 pb-2 flex justify-between">
-                        <span>☀️ Citas para Hoy (<?php echo date('d/m'); ?>)</span>
-                        <span class="bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full text-[10px]"><?php echo count($citasHoy); ?> turnos</span>
-                    </h3>
-
-                    <div class="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
-                        <?php if (empty($citasHoy)): ?>
-                            <p class="text-xs text-slate-500 italic py-4 text-center bg-[#111827]/40 rounded-xl border border-dashed border-slate-800">No hay citas registradas para hoy.</p>
-                        <?php else: ?>
-                            <?php foreach ($citasHoy as $cita): ?>
-                                <div class="bg-[#111827] border border-slate-800 p-3 rounded-xl flex items-center justify-between hover:border-slate-700 transition">
-                                    <div class="space-y-0.5">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="text-xs font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20"><?php echo $cita['hora_corta']; ?></span>
-                                            <span class="text-sm font-bold text-slate-200"><?php echo htmlspecialchars($cita['nombre_cliente']); ?></span>
-                                        </div>
-                                        <div class="text-[11px] text-slate-400">
-                                            <span>Barbero: <b><?php echo htmlspecialchars($cita['nombre_barbero']); ?></b></span>
-                                        </div>
-                                        <a href="https://wa.me/<?php echo $cita['telefono']; ?>" target="_blank" class="text-xs text-emerald-400 flex items-center space-x-1 hover:underline pt-0.5">
-                                            <span>📱</span> <span>WhatsApp</span>
-                                        </a>
-                                    </div>
-                                    <div class="flex items-center space-x-1.5">
-                                        <button onclick="alert('💡 Para reagendar, comunícate con el cliente a su WhatsApp para coordinar el nuevo bloque de hora y cancela este cupo.')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs transition" title="Reagendar Cita">
-                                            🔄
-                                        </button>
-                                        <a href="backend/cancelar_cita.php?id=<?php echo $cita['id']; ?>" onclick="return confirm('¿Seguro que deseas cancelar la cita de <?php echo htmlspecialchars($cita['nombre_cliente']); ?>?')" class="bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-slate-950 p-1.5 rounded-lg text-xs transition" title="Cancelar Cita">
-                                            ❌
-                                        </a>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
+            <form action="admin_dashboard.php" method="GET" class="flex flex-col sm:flex-row gap-3 pt-1">
+                <select name="barbero_ver" class="flex-1 bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500">
+                    <option value="">-- Citas del Administrador (Mis Citas) --</option>
+                    <?php foreach ($barberosLista as $b): ?>
+                        <option value="<?php echo $b['id']; ?>" <?php echo ($barbero_seleccionado == $b['id']) ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($b['nombre']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="flex gap-2">
+                    <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs uppercase tracking-wide transition">
+                        Filtrar Citas
+                    </button>
+                    <?php if ($barbero_seleccionado): ?>
+                        <a href="admin_dashboard.php" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl text-xs flex items-center justify-center transition">
+                            Limpiar
+                        </a>
+                    <?php endif; ?>
                 </div>
+            </form>
+        </section>
+        <?php endif; ?>
 
-                <div class="space-y-3">
-                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-700/60 pb-2 flex justify-between">
-                        <span>🌙 Próximas Citas</span>
-                        <span class="bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full text-[10px]"><?php echo count($citasMes); ?> turnos</span>
-                    </h3>
-
-                    <div class="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
-                        <?php if (empty($citasMes)): ?>
-                            <p class="text-xs text-slate-500 italic py-4 text-center bg-[#111827]/40 rounded-xl border border-dashed border-slate-800">No hay más citas agendadas.</p>
-                        <?php else: ?>
-                            <?php foreach ($citasMes as $cita): ?>
-                                <div class="bg-[#111827] border border-slate-800 p-3 rounded-xl flex items-center justify-between hover:border-slate-700 transition">
-                                    <div class="space-y-0.5">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                                                <?php echo date('d/m', strtotime($cita['fecha'])); ?>
-                                            </span>
-                                            <span class="text-xs font-black text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700"><?php echo $cita['hora_corta']; ?></span>
-                                            <span class="text-sm font-bold text-slate-200"><?php echo htmlspecialchars($cita['nombre_cliente']); ?></span>
-                                        </div>
-                                        <div class="text-[11px] text-slate-400">
-                                            <span>Barbero: <b><?php echo htmlspecialchars($cita['nombre_barbero']); ?></b></span>
-                                        </div>
-                                        <a href="https://wa.me/<?php echo $cita['telefono']; ?>" target="_blank" class="text-xs text-emerald-400 flex items-center space-x-1 hover:underline pt-0.5">
-                                            <span>📱</span> <span>WhatsApp</span>
-                                        </a>
-                                    </div>
-                                    <div class="flex items-center space-x-1.5">
-                                        <button onclick="alert('💡 Para reagendar, comunícate con el cliente a su WhatsApp para coordinar el nuevo bloque de hora y cancela este cupo.')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs transition" title="Reagendar Cita">
-                                            🔄
-                                        </button>
-                                        <a href="backend/cancelar_cita.php?id=<?php echo $cita['id']; ?>" onclick="return confirm('¿Seguro que deseas cancelar la cita de <?php echo htmlspecialchars($cita['nombre_cliente']); ?>?')" class="bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-slate-950 p-1.5 rounded-lg text-xs transition" title="Cancelar Cita">
-                                            ❌
-                                        </a>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
+        <!-- SECCIÓN DE TURNOS (HOY Y MAÑANA) -->
+        <section class="bg-[#1f2937] p-6 rounded-2xl border border-slate-700/50 shadow-xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-700/60 pb-3">
+                <div>
+                    <h2 class="text-lg font-bold text-amber-500 flex items-center space-x-2">
+                        <span>📅</span> <span>Turnos Confirmados (Hoy y Mañana)</span>
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-0.5">
+                        <?php 
+                        if ($es_admin && $barbero_seleccionado) {
+                            $nombreBarberoFiltro = '';
+                            foreach($barberosLista as $b) { 
+                                if($b['id'] == $barbero_seleccionado) $nombreBarberoFiltro = $b['nombre']; 
+                            }
+                            echo "Mostrando citas del barbero: <b>" . htmlspecialchars($nombreBarberoFiltro) . "</b>";
+                        } else {
+                            echo "Mostrando únicamente las citas del Administrador.";
+                        }
+                        ?>
+                    </p>
                 </div>
+                <span class="bg-amber-500/10 text-amber-400 px-3 py-1 rounded-full text-xs font-bold border border-amber-500/20">
+                    <?php echo count($citasAgenda); ?> turnos
+                </span>
+            </div>
 
+            <div class="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
+                <?php if (empty($citasAgenda)): ?>
+                    <p class="text-xs text-slate-500 italic py-8 text-center bg-[#111827]/40 rounded-xl border border-dashed border-slate-800">
+                        No hay citas confirmadas para hoy ni para mañana.
+                    </p>
+                <?php else: ?>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <?php foreach ($citasAgenda as $cita): ?>
+                            <?php 
+                                $esHoy = ($cita['fecha'] == $fecha_hoy);
+                                $etiquetaFecha = $esHoy ? '☀️ Hoy' : '🌙 Mañana';
+                                $claseBorde = $esHoy ? 'border-amber-500/30 bg-[#111827]' : 'border-slate-800 bg-[#111827]';
+                            ?>
+                            <div class="border <?php echo $claseBorde; ?> p-3.5 rounded-xl flex items-center justify-between hover:border-slate-700 transition">
+                                <div class="space-y-1">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-[10px] font-bold px-2 py-0.5 rounded border <?php echo $esHoy ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-slate-800 text-slate-300 border-slate-700'; ?>">
+                                            <?php echo $etiquetaFecha; ?> (<?php echo date('d/m', strtotime($cita['fecha'])); ?>)
+                                        </span>
+                                        <span class="text-xs font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                                            <?php echo $cita['hora_corta']; ?>
+                                        </span>
+                                    </div>
+                                    <div class="text-sm font-bold text-slate-200">
+                                        <?php echo htmlspecialchars($cita['nombre_cliente']); ?>
+                                    </div>
+                                    <div class="text-[11px] text-slate-400">
+                                        Barbero: <b><?php echo htmlspecialchars($cita['nombre_barbero']); ?></b>
+                                    </div>
+                                    <a href="https://wa.me/<?php echo $cita['telefono']; ?>" target="_blank" class="text-xs text-emerald-400 flex items-center space-x-1 hover:underline pt-0.5">
+                                        <span>📱</span> <span>WhatsApp</span>
+                                    </a>
+                                </div>
+                                <div>
+                                    <a href="backend/cancelar_cita.php?id=<?php echo $cita['id']; ?>" onclick="return confirm('¿Seguro que deseas cancelar la cita de <?php echo htmlspecialchars($cita['nombre_cliente']); ?>?')" class="bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-slate-950 px-2.5 py-1.5 rounded-lg text-xs transition inline-block font-bold" title="Cancelar Cita">
+                                        ❌ Cancelar
+                                    </a>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
             </div>
         </section>
 
+        <!-- DISPONIBILIDAD Y GESTIÓN -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 border-t border-slate-700/30 pt-4">
             
             <div class="bg-[#1f2937] p-5 rounded-2xl border border-slate-700/50 shadow-xl space-y-4 lg:col-span-1">
@@ -327,8 +336,6 @@ try {
                         <input type="text" name="nombre" required placeholder="Nombre Completo" class="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500">
                         <input type="email" name="correo" required placeholder="Correo de ingreso" class="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500">
                         
-                        <input type="text" name="telefono" required placeholder="WhatsApp (Ej: 573001234567)" class="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500">
-                        
                         <div class="relative w-full">
                             <input type="password" id="input-password-provisoria" name="password" required placeholder="Contraseña provisoria" 
                                 class="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 pr-10 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500">
@@ -349,20 +356,19 @@ try {
                                 <tr class="border-b border-slate-700 text-slate-400 uppercase tracking-wider">
                                     <th class="pb-2 font-semibold">Nombre</th>
                                     <th class="pb-2 font-semibold">Correo</th>
-                                    <th class="pb-2 font-semibold">WhatsApp</th> 
                                     <th class="pb-2 font-semibold">Rol</th>
                                     <th class="pb-2 font-semibold text-right">Acción</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-700/40 text-slate-300">
-                                <?php foreach ($barberosLista as $b): ?>
+                                <?php foreach ($barberosGestion as $b): ?>
                                     <tr>
                                         <td class="py-3 font-medium text-slate-200"><?php echo htmlspecialchars($b['nombre']); ?></td>
                                         <td class="py-3 text-slate-400"><?php echo htmlspecialchars($b['email']); ?></td>
-                                        <td class="py-3 text-emerald-400 font-mono"><?php echo htmlspecialchars($b['telefono'] ?? 'Sin número'); ?></td>
                                         <td class="py-3"><span class="bg-slate-700 text-slate-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold"><?php echo htmlspecialchars($b['rol']); ?></span></td>
-                                        <td class="py-3 text-right">
-                                            <a href="backend/gestionar_barberos.php?accion=eliminar&id=<?php echo $b['id']; ?>" onclick="return confirm('¿Seguro que deseas despedir/eliminar a este barbero del sistema?')" class="bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-rose-500/20 transition">Despedir</a>
+                                        <td class="py-3 text-right space-x-2">
+                                            <a href="editar_barbero.php?id=<?php echo $b['id']; ?>" class="bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 px-2.5 py-1.5 rounded-lg border border-amber-500/20 transition inline-block">Editar</a>
+                                            <a href="backend/gestionar_barberos.php?accion=eliminar&id=<?php echo $b['id']; ?>" onclick="return confirm('¿Seguro que deseas despedir/eliminar a este barbero del sistema?')" class="bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-rose-500/20 transition inline-block">Despedir</a>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -377,9 +383,9 @@ try {
     </main>
 
     <script>
-        // --- 1. LECTURA DE MENSAJES Y ALERTAS ---
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('msg') === 'creado') alert('✅ ¡Nuevo barbero incorporado al sistema con éxito!');
+        if (urlParams.get('msg') === 'actualizado') alert('✅ Información del barbero actualizada correctamente.');
         if (urlParams.get('msg') === 'eliminado') alert('🗑️ El barbero ha sido eliminado del sistema.');
         if (urlParams.get('msg') === 'cita_cancelada') alert('❌ La cita ha sido cancelada y el horario liberado.');
         if (urlParams.get('msg') === 'horarios_guardados') alert('📆 ¡Tus horarios se han publicado correctamente!');
@@ -388,7 +394,6 @@ try {
         if (urlParams.get('msg') === 'hora_pasada') alert('⚠️ La hora seleccionada ya transcurrió hoy. Por favor elige una hora futura.');
         if (urlParams.get('msg') === 'fecha_invalida') alert('⚠️ No puedes seleccionar fechas pasadas.');
 
-        // --- 2. MOSTRAR / OCULTAR CONTRASEÑA ---
         function togglePassword() {
             const inputPass = document.getElementById("input-password-provisoria");
             if (inputPass) {
@@ -396,14 +401,12 @@ try {
             }
         }
 
-        // --- 3. BLOQUEO DINÁMICO DE HORA PASADA EN EL INPUT TIME ---
         const inputFecha = document.getElementById('input-fecha');
         const inputHora = document.getElementById('input-hora');
 
         function actualizarMinHora() {
             if (!inputFecha || !inputHora) return;
 
-            // Obtener fecha actual en formato local YYYY-MM-DD
             const ahora = new Date();
             const ano = ahora.getFullYear();
             const mes = String(ahora.getMonth() + 1).padStart(2, '0');
@@ -411,20 +414,16 @@ try {
             const fechaHoyStr = `${ano}-${mes}-${dia}`;
 
             if (inputFecha.value === fechaHoyStr) {
-                // Obtener hora actual en formato HH:MM
                 const horas = String(ahora.getHours()).padStart(2, '0');
                 const minutos = String(ahora.getMinutes()).padStart(2, '0');
                 const horaActual = `${horas}:${minutos}`;
 
-                // Asignar restricción mínima
                 inputHora.min = horaActual;
 
-                // Si la hora cargada/seleccionada es anterior a la actual, se borra
                 if (inputHora.value && inputHora.value < horaActual) {
                     inputHora.value = '';
                 }
             } else {
-                // Si selecciona un día futuro, se remueve el límite mínimo de hora
                 inputHora.removeAttribute('min');
             }
         }
