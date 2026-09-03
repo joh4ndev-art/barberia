@@ -16,7 +16,13 @@ $mi_rol = $_SESSION['barbero_rol'];
 // Configuración de zona horaria
 date_default_timezone_set('America/Bogota'); 
 $fecha_hoy = date('Y-m-d');
-$fecha_manana = date('Y-m-d', strtotime('+1 day'));
+
+// CAPTURA DEL MES SELECCIONADO (Si no se envía, por defecto usa el mes y año actual YYYY-MM)
+$mes_seleccionado = isset($_GET['mes']) && $_GET['mes'] !== '' ? $_GET['mes'] : date('Y-m');
+
+// Calcular primer y último día del mes seleccionado
+$primer_dia_mes = $mes_seleccionado . '-01';
+$ultimo_dia_mes = date('Y-m-t', strtotime($primer_dia_mes));
 
 // Exclusividad de rol Admin
 $es_admin = ($mi_rol === 'admin');
@@ -30,40 +36,40 @@ try {
         $barberosLista = $stmtB->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // 2. FILTRAR CITAS (Hoy y Mañana)
+    // 2. FILTRAR CITAS (Según el mes y/o barbero elegido)
     $barbero_seleccionado = isset($_GET['barbero_ver']) && $_GET['barbero_ver'] !== '' ? intval($_GET['barbero_ver']) : null;
 
     if ($es_admin && $barbero_seleccionado) {
-        // Citas del barbero específico seleccionado por el admin (Hoy y Mañana)
-        $sqlCitas = "SELECT c.id, c.fecha, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
+        // Citas del barbero específico en el mes seleccionado
+        $sqlCitas = "SELECT c.id, c.fecha, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero, c.notas 
                    FROM citas c 
                    JOIN usuarios u ON c.barbero_id = u.id 
                    JOIN clientes cl ON c.cliente_id = cl.id 
                    WHERE c.barbero_id = :barbero_id 
-                     AND c.fecha BETWEEN :fecha_hoy AND :fecha_manana 
+                     AND c.fecha BETWEEN :primer_dia AND :ultimo_dia 
                      AND c.estado = 'pendiente'
                    ORDER BY c.fecha ASC, c.hora ASC";
         $stmtC = $pdo->prepare($sqlCitas);
         $stmtC->execute([
-            ':barbero_id'   => $barbero_seleccionado,
-            ':fecha_hoy'    => $fecha_hoy,
-            ':fecha_manana' => $fecha_manana
+            ':barbero_id' => $barbero_seleccionado,
+            ':primer_dia' => $primer_dia_mes,
+            ':ultimo_dia' => $ultimo_dia_mes
         ]);
     } else {
-        // Muestra ÚNICAMENTE las citas propias (Si entra el admin sin filtrar, muestra solo las del Admin)
-        $sqlCitas = "SELECT c.id, c.fecha, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero 
+        // Citas del Administrador / Barbero en el mes seleccionado
+        $sqlCitas = "SELECT c.id, c.fecha, cl.nombre AS nombre_cliente, cl.telefono, TIME_FORMAT(c.hora, '%H:%i') as hora_corta, u.nombre AS nombre_barbero, c.notas 
                    FROM citas c 
                    JOIN usuarios u ON c.barbero_id = u.id 
                    JOIN clientes cl ON c.cliente_id = cl.id 
                    WHERE c.barbero_id = :barbero_id 
-                     AND c.fecha BETWEEN :fecha_hoy AND :fecha_manana 
+                     AND c.fecha BETWEEN :primer_dia AND :ultimo_dia 
                      AND c.estado = 'pendiente'
                    ORDER BY c.fecha ASC, c.hora ASC";
         $stmtC = $pdo->prepare($sqlCitas);
         $stmtC->execute([
-            ':barbero_id'   => $mi_id,
-            ':fecha_hoy'    => $fecha_hoy,
-            ':fecha_manana' => $fecha_manana
+            ':barbero_id' => $mi_id,
+            ':primer_dia' => $primer_dia_mes,
+            ':ultimo_dia' => $ultimo_dia_mes
         ]);
     }
     $citasAgenda = $stmtC->fetchAll(PDO::FETCH_ASSOC);
@@ -133,17 +139,27 @@ try {
             <p class="text-sm text-slate-400">Panel de Administración Global y Personal de Agenda.</p>
         </div>
 
-        <!-- VER CITAS DE LOS BARBEROS (Solo Admin) -->
-        <?php if ($es_admin): ?>
+        <!-- FILTRO DE AGENDA POR MES Y BARBERO -->
         <section class="bg-[#1f2937] p-5 rounded-2xl border border-slate-700/50 shadow-xl space-y-3">
             <div>
                 <h2 class="text-sm font-bold text-amber-500 flex items-center space-x-2">
-                    <span>👥</span> <span>Ver las citas de los barberos</span>
+                    <span>🔍</span> <span>Filtrar Citas de la Agenda</span>
                 </h2>
-                <p class="text-xs text-slate-400 mt-0.5">Selecciona un barbero para consultar sus turnos confirmados entre hoy y mañana.</p>
+                <p class="text-xs text-slate-400 mt-0.5">Selecciona un mes<?php echo $es_admin ? ' o un barbero específico' : ''; ?> para consultar los turnos.</p>
             </div>
 
             <form action="admin_dashboard.php" method="GET" class="flex flex-col sm:flex-row gap-3 pt-1">
+                
+                <!-- Selector de Mes -->
+                <input 
+                    type="month" 
+                    name="mes" 
+                    value="<?php echo htmlspecialchars($mes_seleccionado); ?>" 
+                    class="bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500"
+                >
+
+                <!-- Selector de Barbero (Solo Visible para Admin) -->
+                <?php if ($es_admin): ?>
                 <select name="barbero_ver" class="flex-1 bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500">
                     <option value="">-- Citas del Administrador (Mis Citas) --</option>
                     <?php foreach ($barberosLista as $b): ?>
@@ -152,11 +168,13 @@ try {
                         </option>
                     <?php endforeach; ?>
                 </select>
+                <?php endif; ?>
+
                 <div class="flex gap-2">
                     <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs uppercase tracking-wide transition">
-                        Filtrar Citas
+                        Filtrar
                     </button>
-                    <?php if ($barbero_seleccionado): ?>
+                    <?php if ($barbero_seleccionado || isset($_GET['mes'])): ?>
                         <a href="admin_dashboard.php" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl text-xs flex items-center justify-center transition">
                             Limpiar
                         </a>
@@ -164,14 +182,14 @@ try {
                 </div>
             </form>
         </section>
-        <?php endif; ?>
 
-        <!-- SECCIÓN DE TURNOS (HOY Y MAÑANA) -->
+        <!-- SECCIÓN DE TURNOS DEL MES -->
         <section class="bg-[#1f2937] p-6 rounded-2xl border border-slate-700/50 shadow-xl space-y-4">
             <div class="flex justify-between items-center border-b border-slate-700/60 pb-3">
                 <div>
                     <h2 class="text-lg font-bold text-amber-500 flex items-center space-x-2">
-                        <span>📅</span> <span>Turnos Confirmados (Hoy y Mañana)</span>
+                        <span>📅</span> 
+                        <span>Turnos Confirmados (<?php echo date('m/Y', strtotime($primer_dia_mes)); ?>)</span>
                     </h2>
                     <p class="text-xs text-slate-400 mt-0.5">
                         <?php 
@@ -195,21 +213,31 @@ try {
             <div class="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
                 <?php if (empty($citasAgenda)): ?>
                     <p class="text-xs text-slate-500 italic py-8 text-center bg-[#111827]/40 rounded-xl border border-dashed border-slate-800">
-                        No hay citas confirmadas para hoy ni para mañana.
+                        No hay citas confirmadas pendientes para este período.
                     </p>
                 <?php else: ?>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <?php foreach ($citasAgenda as $cita): ?>
                             <?php 
                                 $esHoy = ($cita['fecha'] == $fecha_hoy);
-                                $etiquetaFecha = $esHoy ? '☀️ Hoy' : '🌙 Mañana';
-                                $claseBorde = $esHoy ? 'border-amber-500/30 bg-[#111827]' : 'border-slate-800 bg-[#111827]';
+                                $esManana = ($cita['fecha'] == date('Y-m-d', strtotime('+1 day')));
+                                
+                                if ($esHoy) {
+                                    $etiquetaFecha = '☀️ Hoy';
+                                    $claseBorde = 'border-amber-500/30 bg-[#111827]';
+                                } elseif ($esManana) {
+                                    $etiquetaFecha = '🌙 Mañana';
+                                    $claseBorde = 'border-slate-800 bg-[#111827]';
+                                } else {
+                                    $etiquetaFecha = '📅 ' . date('d/m/Y', strtotime($cita['fecha']));
+                                    $claseBorde = 'border-slate-800 bg-[#111827]';
+                                }
                             ?>
-                            <div class="border <?php echo $claseBorde; ?> p-3.5 rounded-xl flex items-center justify-between hover:border-slate-700 transition">
-                                <div class="space-y-1">
+                            <div class="border <?php echo $claseBorde; ?> p-3.5 rounded-xl flex items-start justify-between hover:border-slate-700 transition">
+                                <div class="space-y-1.5 flex-1 pr-2">
                                     <div class="flex items-center space-x-2">
                                         <span class="text-[10px] font-bold px-2 py-0.5 rounded border <?php echo $esHoy ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-slate-800 text-slate-300 border-slate-700'; ?>">
-                                            <?php echo $etiquetaFecha; ?> (<?php echo date('d/m', strtotime($cita['fecha'])); ?>)
+                                            <?php echo $etiquetaFecha; ?>
                                         </span>
                                         <span class="text-xs font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                                             <?php echo $cita['hora_corta']; ?>
@@ -221,14 +249,36 @@ try {
                                     <div class="text-[11px] text-slate-400">
                                         Barbero: <b><?php echo htmlspecialchars($cita['nombre_barbero']); ?></b>
                                     </div>
-                                    <a href="https://wa.me/<?php echo $cita['telefono']; ?>" target="_blank" class="text-xs text-emerald-400 flex items-center space-x-1 hover:underline pt-0.5">
-                                        <span>📱</span> <span>WhatsApp</span>
+
+                                    <!-- VISTA DE DETALLES/DESCRIPCIÓN DEL CORTE -->
+                                    <div class="bg-[#1f2937] border border-slate-700/60 p-2 rounded-lg text-xs mt-1">
+                                        <span class="font-bold text-amber-500 text-[11px] block mb-0.5">✂️ Corte / Detalle:</span>
+                                        <p class="text-slate-300 italic text-[11px] leading-tight">
+                                            <?php echo !empty($cita['notas']) ? htmlspecialchars($cita['notas']) : 'Sin especificación'; ?>
+                                        </p>
+                                    </div>
+
+                                    <a href="https://wa.me/<?php echo $cita['telefono']; ?>" target="_blank" class="text-xs text-emerald-400 flex items-center space-x-1 hover:underline pt-1">
+                                        <span>📱</span> <span>WhatsApp: <?php echo htmlspecialchars($cita['telefono']); ?></span>
                                     </a>
                                 </div>
-                                <div>
-                                    <a href="backend/cancelar_cita.php?id=<?php echo $cita['id']; ?>" onclick="return confirm('¿Seguro que deseas cancelar la cita de <?php echo htmlspecialchars($cita['nombre_cliente']); ?>?')" class="bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-slate-950 px-2.5 py-1.5 rounded-lg text-xs transition inline-block font-bold" title="Cancelar Cita">
+
+                                <!-- ACCIONES DE CITA -->
+                                <div class="flex flex-col gap-2">
+                                    <button 
+                                        type="button" 
+                                        onclick="abrirModalGestion('cancelar', '<?php echo $cita['id']; ?>', '<?php echo htmlspecialchars(addslashes($cita['nombre_cliente'])); ?>', '<?php echo $cita['telefono']; ?>', '<?php echo date('d/m/Y', strtotime($cita['fecha'])); ?>', '<?php echo $cita['hora_corta']; ?>')" 
+                                        class="bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-slate-950 px-2.5 py-1.5 rounded-lg text-xs transition font-bold text-center" 
+                                        title="Cancelar Cita">
                                         ❌ Cancelar
-                                    </a>
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onclick="abrirModalGestion('reubicar', '<?php echo $cita['id']; ?>', '<?php echo htmlspecialchars(addslashes($cita['nombre_cliente'])); ?>', '<?php echo $cita['telefono']; ?>', '<?php echo date('d/m/Y', strtotime($cita['fecha'])); ?>', '<?php echo $cita['hora_corta']; ?>')" 
+                                        class="bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 px-2.5 py-1.5 rounded-lg text-xs transition font-bold text-center" 
+                                        title="Reubicar Cita">
+                                        🔄 Reubicar
+                                    </button>
                                 </div>
                             </div>
                         <?php endforeach; ?>
@@ -382,7 +432,107 @@ try {
 
     </main>
 
+    <!-- MODAL DE CONFIRMACIÓN / MENSAJE WHATSAPP -->
+    <div id="modalGestion" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+        <div class="bg-[#1f2937] border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                <h3 id="modalTitulo" class="text-lg font-bold text-amber-500">Gestión de Cita</h3>
+                <button onclick="cerrarModal()" class="text-slate-400 hover:text-white font-bold text-lg">&times;</button>
+            </div>
+            
+            <p id="modalDescripcion" class="text-sm text-slate-300"></p>
+
+            <div class="bg-[#111827] p-3.5 rounded-xl border border-slate-800 space-y-1">
+                <p class="text-xs text-slate-400">Mensaje a enviar por WhatsApp:</p>
+                <p id="modalMensajePreview" class="text-xs text-amber-400 italic"></p>
+            </div>
+
+            <div class="flex justify-end space-x-3 pt-2">
+                <button onclick="cerrarModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2.5 rounded-xl font-bold transition">
+                    Cancelar
+                </button>
+                <button id="btnEnviarWhatsApp" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs px-4 py-2.5 rounded-xl font-bold transition flex items-center space-x-2">
+                    <span>📱</span> <span>Enviar mensaje por WhatsApp</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // Variables globales para el modal
+        let citaActualId = null;
+        let accionTipo = null;
+        let urlWhatsApp = '';
+
+        function abrirModalGestion(accion, citaId, clienteNombre, telefono, fecha, hora) {
+            citaActualId = citaId;
+            accionTipo = accion;
+
+            const modal = document.getElementById('modalGestion');
+            const titulo = document.getElementById('modalTitulo');
+            const descripcion = document.getElementById('modalDescripcion');
+            const preview = document.getElementById('modalMensajePreview');
+
+            // Limpiar número para WhatsApp
+            let telLimpio = telefono.replace(/\D/g, '');
+
+            let mensaje = '';
+            if (accion === 'cancelar') {
+                titulo.innerText = '❌ Cancelar Cita';
+                descripcion.innerText = `¿Seguro que deseas cancelar la cita de ${clienteNombre} del ${fecha} a las ${hora}?`;
+                mensaje = `Hola ${clienteNombre}, te informamos que lamentablemente hemos tenido que cancelar tu cita del día ${fecha} a las ${hora}. Disculpa los inconvenientes.`;
+            } else if (accion === 'reubicar') {
+                titulo.innerText = '🔄 Reubicar Cita';
+                descripcion.innerText = `Vas a solicitar reubicar la cita de ${clienteNombre} programada para el ${fecha} a las ${hora}.`;
+                mensaje = `Hola ${clienteNombre}, necesitamos reubicar tu cita del día ${fecha} a las ${hora}. Por favor indícanos qué otro horario te conviene. ¡Gracias!`;
+            }
+
+            preview.innerText = `"${mensaje}"`;
+            urlWhatsApp = `https://wa.me/${telLimpio}?text=${encodeURIComponent(mensaje)}`;
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function cerrarModal() {
+            const modal = document.getElementById('modalGestion');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+            citaActualId = null;
+            accionTipo = null;
+            urlWhatsApp = '';
+        }
+
+        // Evento al hacer clic en "Enviar mensaje por WhatsApp"
+        document.getElementById('btnEnviarWhatsApp').addEventListener('click', function() {
+            if (!citaActualId || !urlWhatsApp) return;
+
+            // 1. Abrir WhatsApp en una nueva pestaña
+            window.open(urlWhatsApp, '_blank');
+
+            // 2. Notificar al backend en PHP usando la ruta dentro de "backend/"
+            fetch('backend/procesar_cancelacion.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `cita_id=${citaActualId}&accion=${accionTipo}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload(); 
+                } else {
+                    alert('Error al actualizar el sistema: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+
+            cerrarModal();
+        });
+
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('msg') === 'creado') alert('✅ ¡Nuevo barbero incorporado al sistema con éxito!');
         if (urlParams.get('msg') === 'actualizado') alert('✅ Información del barbero actualizada correctamente.');

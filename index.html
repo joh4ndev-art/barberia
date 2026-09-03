@@ -37,7 +37,6 @@
                         <div class="bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 text-slate-400 flex items-center font-semibold">
                             +57
                         </div>
-                        <!-- Cambiado name a "telefono_input" para procesarlo con el indicativo -->
                         <input type="tel" id="telefono_num" placeholder="3001234567" required
                             class="w-full bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition">
                     </div>
@@ -66,6 +65,15 @@
                     </div>
                 </div>
 
+                <!-- NUEVO CAMPO: Descripción del Corte / Notas adicionales -->
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">
+                        Descripción del Corte / Detalles <span class="text-xs text-slate-500 font-normal">(Opcional)</span>
+                    </label>
+                    <textarea name="notas" rows="2" placeholder="Ej. Fade bajo con degradado en barba, o recorte solo con tijera arriba..."
+                        class="w-full bg-[#111827] border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition text-sm resize-none"></textarea>
+                </div>
+
                 <!-- Inputs Ocultos Requeridos por Backend -->
                 <input type="hidden" name="barbero_id" id="input_barbero" required>
                 <input type="hidden" name="hora" id="input_hora" required>
@@ -85,15 +93,23 @@
         </p>
     </div>
 
+    <!-- Modal de Éxito -->
     <div id="modal-exito" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50 animate-fade-in">
         <div class="bg-[#1f2937] border border-slate-700 max-w-md w-full p-6 rounded-2xl text-center space-y-4 shadow-2xl">
             <div class="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl border border-emerald-500/20 animate-bounce">
                 ✓
             </div>
             <h3 class="text-xl font-extrabold text-slate-100">¡Cita Reservada con Éxito!</h3>
+            
             <p class="text-sm text-slate-400 leading-relaxed">
-                Tu turno ha sido registrado en el sistema. Tu barbero se pondrá en contacto contigo vía WhatsApp para la confirmación final. ¡Te esperamos! 💈✂️
+                Tu turno ha sido registrado en el sistema. Tu barbero se pondrá en contacto contigo vía WhatsApp para la confirmación final.
             </p>
+
+            <p id="mensaje-contacto-barbero" class="hidden text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 font-medium leading-relaxed">
+            </p>
+
+            <p class="text-xs text-slate-400">¡Te esperamos! 💈✂️</p>
+
             <button onclick="cerrarModal()" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition">
                 Entendido
             </button>
@@ -122,7 +138,6 @@
                 return false;
             }
 
-            // Concatenar el indicativo +57 al número ingresado
             const telFinal = numTel.startsWith('57') ? numTel : '57' + numTel;
             document.getElementById("input_telefono_final").value = telFinal;
 
@@ -133,10 +148,19 @@
     <script src="js/app.js?v=3"></script>
 
     <script>
-        // Mostrar modal si la URL trae ?reserva=exitosa
         document.addEventListener('DOMContentLoaded', () => {
             const urlParams = new URLSearchParams(window.location.search);
+            
             if (urlParams.get('reserva') === 'exitosa') {
+                const nombreBarbero = urlParams.get('barbero');
+                const telBarbero = urlParams.get('telefono');
+                const contenedorContacto = document.getElementById('mensaje-contacto-barbero');
+
+                if (nombreBarbero && telBarbero && contenedorContacto) {
+                    contenedorContacto.innerHTML = `Si prefiere comunicarse con <b>${nombreBarbero}</b>, escriba al <b>${telBarbero}</b>.`;
+                    contenedorContacto.classList.remove('hidden');
+                }
+
                 const modal = document.getElementById('modal-exito');
                 if (modal) {
                     modal.classList.remove('hidden');
@@ -149,7 +173,6 @@
             if (modal) {
                 modal.classList.add('hidden');
             }
-            // Limpiar la URL para que no vuelva a salir el modal si el usuario refresca
             window.history.replaceState({}, document.title, window.location.pathname);
         }
     </script>
