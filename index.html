@@ -65,7 +65,7 @@
                     </div>
                 </div>
 
-                <!-- NUEVO CAMPO: Descripción del Corte / Notas adicionales -->
+                <!-- Descripción del Corte / Notas adicionales -->
                 <div>
                     <label class="block text-sm font-medium text-slate-300 mb-2">
                         Descripción del Corte / Detalles <span class="text-xs text-slate-500 font-normal">(Opcional)</span>
@@ -153,11 +153,26 @@
             
             if (urlParams.get('reserva') === 'exitosa') {
                 const nombreBarbero = urlParams.get('barbero');
-                const telBarbero = urlParams.get('telefono');
+                let telBarbero = urlParams.get('telefono');
                 const contenedorContacto = document.getElementById('mensaje-contacto-barbero');
 
-                if (nombreBarbero && telBarbero && contenedorContacto) {
-                    contenedorContacto.innerHTML = `Si prefiere comunicarse con <b>${nombreBarbero}</b>, escriba al <b>${telBarbero}</b>.`;
+                if (nombreBarbero && contenedorContacto) {
+                    // Limpiar y formatear el teléfono si está presente
+                    if (telBarbero && telBarbero !== 'null' && telBarbero !== 'undefined' && telBarbero.trim() !== '') {
+                        // Limpiar caracteres no numéricos excepto el signo +
+                        let telLimpio = telBarbero.replace(/[^0-9]/g, '');
+                        
+                        // Añadir + si no lo tiene
+                        let telFormateado = telBarbero.startsWith('+') ? telBarbero : '+' + telLimpio;
+                        
+                        // Enlace directo a WhatsApp
+                        const linkWhatsapp = `https://wa.me/${telLimpio}`;
+
+                        contenedorContacto.innerHTML = `Si prefiere comunicarse con <b>${nombreBarbero}</b>, escriba al <a href="${linkWhatsapp}" target="_blank" class="underline font-bold hover:text-amber-300 transition">${telFormateado}</a>.`;
+                    } else {
+                        contenedorContacto.innerHTML = `Su cita ha sido asignada a <b>${nombreBarbero}</b>.`;
+                    }
+
                     contenedorContacto.classList.remove('hidden');
                 }
 

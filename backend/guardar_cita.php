@@ -12,7 +12,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $nombre     = trim($_POST['nombre_cliente'] ?? $_POST['nombre'] ?? '');
     $telefono   = trim($_POST['telefono_cliente'] ?? $_POST['telefono'] ?? '');
     $email      = trim($_POST['email_cliente'] ?? $_POST['email'] ?? '');
-    $notas      = trim($_POST['notas'] ?? ''); // <--- Captura de la descripción del corte
+    $notas      = trim($_POST['notas'] ?? '');
 
     if (empty($barbero_id) || empty($fecha) || empty($hora) || empty($nombre) || empty($telefono)) {
         die("Por favor completa todos los campos obligatorios.");
@@ -49,7 +49,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         ]);
         $cliente_id = $pdo->lastInsertId();
 
-        // 3. Crear la cita (incluyendo la columna notas)
+        // 3. Crear la cita (incluyendo notas)
         $stmtCita = $pdo->prepare("INSERT INTO citas (cliente_id, barbero_id, fecha, hora, estado, notas) 
                                    VALUES (:cliente_id, :barbero_id, :fecha, :hora, 'pendiente', :notas)");
         $stmtCita->execute([
@@ -69,17 +69,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             ':hora'       => $hora
         ]);
 
-        // 5. Consultar nombre del barbero
-        $stmtBarbero = $pdo->prepare("SELECT nombre FROM usuarios WHERE id = :id");
+        // 5. Consultar nombre y teléfono REAL del barbero
+        $stmtBarbero = $pdo->prepare("SELECT nombre, telefono FROM usuarios WHERE id = :id");
         $stmtBarbero->execute([':id' => $barbero_id]);
         $barberoData = $stmtBarbero->fetch(PDO::FETCH_ASSOC);
 
         $pdo->commit();
 
         $nombreBarbero   = urlencode($barberoData['nombre'] ?? '');
-        $telefonoGeneral = urlencode('+573001234567');
+        $telefonoBarbero = urlencode($barberoData['telefono'] ?? '');
 
-        header("Location: ../index.html?reserva=exitosa&barbero={$nombreBarbero}&telefono={$telefonoGeneral}");
+        // Redireccionar enviando el teléfono dinámico del barbero
+        header("Location: ../index.html?reserva=exitosa&barbero={$nombreBarbero}&telefono={$telefonoBarbero}");
         exit();
 
     } catch (PDOException $e) {

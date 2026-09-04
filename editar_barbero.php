@@ -10,19 +10,22 @@ require_once 'backend/conexion.php';
 
 $id = $_GET['id'] ?? null;
 if (!$id) {
-    header("Location: admin_dashboard.php");
+    header("Location: gestion_barberos.php");
     exit();
 }
 
-// Obtener los datos actuales del barbero
-$stmt = $pdo->prepare("SELECT id, nombre, email FROM usuarios WHERE id = :id AND rol = 'barbero'");
+// Obtener los datos actuales del barbero (incluyendo teléfono)
+$stmt = $pdo->prepare("SELECT id, nombre, email, telefono FROM usuarios WHERE id = :id AND rol = 'barbero'");
 $stmt->execute([':id' => $id]);
 $barbero = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$barbero) {
-    header("Location: admin_dashboard.php?msg=barbero_no_encontrado");
+    header("Location: gestion_barberos.php?msg=barbero_no_encontrado");
     exit();
 }
+
+// Limpiar el prefijo +57 si viene guardado en la base de datos para mostrar solo los 10 dígitos en el input
+$telefonoLimpio = preg_replace('/^\+57\s*/', '', $barbero['telefono'] ?? '');
 ?>
 
 <!DOCTYPE html>
@@ -38,22 +41,45 @@ if (!$barbero) {
     <div class="bg-[#1f2937] p-6 md:p-8 rounded-2xl border border-slate-700/50 shadow-2xl w-full max-w-md space-y-6">
         <div class="flex items-center justify-between border-b border-slate-700/50 pb-4">
             <h1 class="text-xl font-bold text-amber-500">✏️ Editar Barbero</h1>
-            <a href="admin_dashboard.php" class="text-xs text-slate-400 hover:text-slate-200 transition">← Volver</a>
+            <a href="gestion_barberos.php" class="text-xs text-slate-400 hover:text-slate-200 transition">← Volver</a>
         </div>
 
         <form action="backend/gestionar_barberos.php?accion=editar" method="POST" class="space-y-4">
             <input type="hidden" name="id" value="<?php echo $barbero['id']; ?>">
 
+            <!-- NOMBRE COMPLETO -->
             <div>
                 <label class="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Nombre Completo</label>
                 <input type="text" name="nombre" value="<?php echo htmlspecialchars($barbero['nombre']); ?>" required class="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500">
             </div>
 
+            <!-- CORREO ELECTRÓNICO -->
             <div>
                 <label class="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Correo Electrónico</label>
                 <input type="email" name="correo" value="<?php echo htmlspecialchars($barbero['email']); ?>" required class="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500">
             </div>
 
+            <!-- TELÉFONO / WHATSAPP -->
+            <div>
+                <label class="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Teléfono / WhatsApp</label>
+                <div class="flex rounded-xl overflow-hidden border border-slate-700 focus-within:border-amber-500 transition">
+                    <span class="bg-[#18202f] text-slate-400 px-3 py-2.5 text-xs font-bold flex items-center border-r border-slate-700/80 select-none">
+                        +57
+                    </span>
+                    <input 
+                        type="tel" 
+                        name="telefono" 
+                        value="<?php echo htmlspecialchars($telefonoLimpio); ?>"
+                        required 
+                        pattern="[0-9]{10}"
+                        title="Ingresa un número celular de 10 dígitos (ej. 3001234567)"
+                        placeholder="3001234567" 
+                        class="w-full bg-[#111827] px-3 py-2.5 text-xs text-slate-100 focus:outline-none placeholder:text-slate-600"
+                    >
+                </div>
+            </div>
+
+            <!-- CONTRASEÑA -->
             <div>
                 <label class="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Nueva Contraseña (Opcional)</label>
                 <div class="relative">
@@ -62,9 +88,10 @@ if (!$barbero) {
                 </div>
             </div>
 
+            <!-- BOTONES DE ACCIÓN -->
             <div class="pt-2 flex space-x-3">
-                <a href="admin_dashboard.php" class="w-1/2 text-center bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 rounded-xl text-xs uppercase tracking-wide transition">Cancelar</a>
-                <button type="submit" class="w-1/2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-2.5 rounded-xl text-xs uppercase tracking-wide transition">Guardar Cambios</button>
+                <a href="gestion_barberos.php" class="w-1/2 text-center bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 rounded-xl text-xs uppercase tracking-wide transition">Cancelar</a>
+                <button type="submit" class="w-1/2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-2.5 rounded-xl text-xs uppercase tracking-wide transition cursor-pointer">Guardar Cambios</button>
             </div>
         </form>
     </div>

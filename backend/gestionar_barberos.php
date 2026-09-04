@@ -13,30 +13,46 @@ $accion = $_GET['accion'] ?? '';
 // ---------------------------------------------------------
 // ACCIÓN: REGISTRAR NUEVO BARBERO
 // ---------------------------------------------------------
-if ($_SERVER["REQUEST_METHOD"] === "POST" && $accion === "crear") {
+if ($_SERVER["REQUEST_METHOD"] === "POST" && ($accion === "crear" || empty($accion))) {
     $nombre   = trim($_POST['nombre'] ?? '');
     $correo   = trim($_POST['correo'] ?? $_POST['email'] ?? '');
+    $telefono = trim($_POST['telefono'] ?? '');
     $password = trim($_POST['password'] ?? '');
     
     if (empty($nombre) || empty($correo) || empty($password)) {
-        die("Por favor completa los campos obligatorios.");
+        header("Location: ../gestion_barberos.php?error=campos_vacios");
+        exit();
+    }
+
+    // Formatear teléfono con el prefijo +57 si no lo tiene
+    if (!empty($telefono) && strpos($telefono, '+57') !== 0) {
+        $telefono = '+57' . $telefono;
     }
 
     $passwordCifrada = password_hash($password, PASSWORD_DEFAULT);
 
     try {
-        // Se envía 1 como entero para el campo estado (1 = activo, 0 = inactivo)
-        $sql = "INSERT INTO usuarios (nombre, email, password, rol, estado) 
-                VALUES (:nombre, :email, :password, 'barbero', 1)";
+        // Validar que el correo no esté duplicado
+        $stmtCheck = $pdo->prepare("SELECT id FROM usuarios WHERE email = :email LIMIT 1");
+        $stmtCheck->execute([':email' => $correo]);
+        if ($stmtCheck->fetch()) {
+            header("Location: ../gestion_barberos.php?error=correo_existente");
+            exit();
+        }
+
+        // Se inserta rol en minúsculas ('barbero') para asegurar compatibilidad con la consulta SELECT
+        $sql = "INSERT INTO usuarios (nombre, email, telefono, password, rol, estado) 
+                VALUES (:nombre, :email, :telefono, :password, 'barbero', 1)";
         
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
             ':nombre'   => $nombre,
             ':email'    => $correo,
+            ':telefono' => $telefono,
             ':password' => $passwordCifrada
         ]);
 
-        header("Location: ../admin_dashboard.php?msg=creado");
+        header("Location: ../gestion_barberos.php?msg=creado");
         exit();
     } catch (PDOException $e) {
         die("Error al registrar barbero: " . $e->getMessage());
@@ -49,38 +65,46 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && $accion === "crear") {
 if ($_SERVER["REQUEST_METHOD"] === "POST" && $accion === "editar") {
     $id       = (int)($_POST['id'] ?? 0);
     $nombre   = trim($_POST['nombre'] ?? '');
-    $correo   = trim($_POST['correo'] ?? '');
+    $correo   = trim($_POST['correo'] ?? $_POST['email'] ?? '');
+    $telefono = trim($_POST['telefono'] ?? '');
     $password = trim($_POST['password'] ?? '');
 
     if ($id <= 0 || empty($nombre) || empty($correo)) {
-        header("Location: ../admin_dashboard.php?msg=campos_vacios");
+        header("Location: ../gestion_barberos.php?msg=campos_vacios");
         exit();
     }
 
+    // Formatear teléfono con +57
+    if (!empty($telefono) && strpos($telefono, '+57') !== 0) {
+        $telefono = '+57' . $telefono;
+    }
+
     try {
-        // Si ingresó una contraseña nueva la hasheamos, si no, mantenemos la actual
+        // Si ingresó contraseña nueva la actualizamos; si no, conservamos la actual
         if (!empty($password)) {
             $passHash = password_hash($password, PASSWORD_DEFAULT);
-            $sql = "UPDATE usuarios SET nombre = :nombre, email = :email, password = :pass WHERE id = :id AND rol = 'barbero'";
+            $sql = "UPDATE usuarios SET nombre = :nombre, email = :email, telefono = :telefono, password = :pass WHERE id = :id AND LOWER(rol) = 'barbero'";
             $params = [
-                ':nombre' => $nombre,
-                ':email'  => $correo,
-                ':pass'    => $passHash,
-                ':id'      => $id
+                ':nombre'   => $nombre,
+                ':email'    => $correo,
+                ':telefono' => $telefono,
+                ':pass'     => $passHash,
+                ':id'       => $id
             ];
         } else {
-            $sql = "UPDATE usuarios SET nombre = :nombre, email = :email WHERE id = :id AND rol = 'barbero'";
+            $sql = "UPDATE usuarios SET nombre = :nombre, email = :email, telefono = :telefono WHERE id = :id AND LOWER(rol) = 'barbero'";
             $params = [
-                ':nombre' => $nombre,
-                ':email'  => $correo,
-                ':id'      => $id
+                ':nombre'   => $nombre,
+                ':email'    => $correo,
+                ':telefono' => $telefono,
+                ':id'       => $id
             ];
         }
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
 
-        header("Location: ../admin_dashboard.php?msg=actualizado");
+        header("Location: ../gestion_barberos.php?msg=actualizado");
         exit();
     } catch (PDOException $e) {
         die("Error al actualizar barbero: " . $e->getMessage());
@@ -90,8 +114,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && $accion === "editar") {
 // ---------------------------------------------------------
 // ACCIÓN: ELIMINAR BARBERO Y LIMPIAR DEPENDENCIAS
 // ---------------------------------------------------------
-if ($accion === "eliminar" && isset($_GET['id'])) {
-    $id_eliminar = (int)$_GET['id'];
+if ($accion === "eliminar" && (isset($_GET['id']) || isset($_POST['barbero_id']))) {
+    $id_eliminar = (int)($_POST['barbero_id'] ?? $_GET['id']);
 
     try {
         $pdo->beginTransaction();
@@ -105,12 +129,12 @@ if ($accion === "eliminar" && isset($_GET['id'])) {
         $stmtDispo->execute([':id' => $id_eliminar]);
 
         // 3. Eliminar al usuario de la tabla usuarios
-        $stmtUsuario = $pdo->prepare("DELETE FROM usuarios WHERE id = :id AND rol = 'barbero'");
+        $stmtUsuario = $pdo->prepare("DELETE FROM usuarios WHERE id = :id AND LOWER(rol) = 'barbero'");
         $stmtUsuario->execute([':id' => $id_eliminar]);
 
         $pdo->commit();
 
-        header("Location: ../admin_dashboard.php?msg=eliminado");
+        header("Location: ../gestion_barberos.php?msg=eliminado");
         exit();
     } catch (PDOException $e) {
         if ($pdo->inTransaction()) {
@@ -120,7 +144,7 @@ if ($accion === "eliminar" && isset($_GET['id'])) {
     }
 }
 
-// Si la acción no coincide con ninguna opción válida
-header("Location: ../admin_dashboard.php");
+// Redirección por defecto
+header("Location: ../gestion_barberos.php");
 exit();
 ?>

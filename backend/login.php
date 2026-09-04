@@ -26,16 +26,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 die("Tu cuenta se encuentra inactiva. Contacta al administrador.");
             }
 
-            // Guardamos variables de sesión requeridas por el dashboard
+            // Guardamos la sesión estandarizada para todo el sistema
             $_SESSION['usuario_id']     = $usuario['id'];
+            $_SESSION['usuario_nombre'] = $usuario['nombre'];
+            $_SESSION['usuario_rol']    = $usuario['rol'];
+
+            // Variables secundarias por compatibilidad
             $_SESSION['barbero_id']     = $usuario['id'];
             $_SESSION['barbero_nombre'] = $usuario['nombre'];
             $_SESSION['barbero_rol']    = $usuario['rol'];
-            $_SESSION['nombre']          = $usuario['nombre'];
-            $_SESSION['rol']             = $usuario['rol'];
+            $_SESSION['nombre']         = $usuario['nombre'];
+            $_SESSION['rol']            = $usuario['rol'];
 
-            // Redirección válida según la DB (admin o barbero)
-            if ($usuario['rol'] === 'admin' || $usuario['rol'] === 'barbero') {
+            // Redirección según el rol
+            $rol_normalizado = strtolower(trim($usuario['rol']));
+            if ($rol_normalizado === 'admin' || $rol_normalizado === 'barbero' || $rol_normalizado === 'administrador') {
                 header("Location: ../admin_dashboard.php");
             } else {
                 header("Location: ../dashboard.php");
